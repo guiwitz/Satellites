@@ -1,0 +1,14 @@
+channels:
+  - conda-forge
+dependencies:
+  - scipy
+  - numpy
+  - matplotlib
+  - pandas
+  - scikit-image
+  - jupyter_contrib_nbextensions
+  - ipywidgets
+  - tqdm
+  - pip
+  - pip:
+    - PyGeodesy

@@ -11,5 +11,6 @@ dependencies:
   - ipywidgets
   - tqdm
   - pip
+  - voila
   - pip:
     - PyGeodesy

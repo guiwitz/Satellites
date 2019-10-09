@@ -34,6 +34,8 @@ class Radplot:
         self.stations = stations
         self.address_sat = address_sat
         
+        #self.interactive_rad()
+        
         
     def main_date(self):
         date1 = widgets.DatePicker(
@@ -56,7 +58,7 @@ class Radplot:
         button_style='', # 'success', 'info', 'warning', 'danger' or ''
         tooltip='Click me',
         icon='check')
-        button.on_click(self.interactive_rad)
+        button.on_click(self.data_update)
 
         d = {'date1': date1, 'date2': date2}
 
@@ -66,13 +68,50 @@ class Radplot:
         
         self.ui = ui
         self.out = out
+        self.button = button
         display(ui,out)
 
     def update_date(self, date1, date2):
         self.date1 = date1
         self.date2 = date2
         
-    def interactive_rad(self, on_click):
+    def data_update(self, on_click):
+        stations= self.stations
+    
+        #create a list of dates between start and end date 
+        date_list = [self.date1 + timedelta(days=x) for x in range((self.date2-self.date1).days+1)]
+        print(self.date1)
+        #calculate gps weeks times (year, week, day)
+        gps_weeks = [aiub.date_to_gpsweeks(x) for x in date_list]
+
+        #load satellite data
+        temp_pd = pd.concat([aiub.import_RM_file(self.address_sat, g) for g in gps_weeks]).reset_index()
+
+        #reanme satellite types
+        sat_dict = {'G':'GPS','R':'GLONASS','E':'Galileo','C':'BeiDou','J':'QZSS'}
+        temp_pd['satellite'] = temp_pd.satellite.apply(lambda x : sat_dict[x])
+        self.temp_pd = temp_pd
+
+        #caluclate elevation and azimuth for all satellites for given station
+        temp_pd = aiub.el_al_single_station_fast(temp_pd, self.curr_stat)
+        temp_pd['curr_stat'] = self.curr_stat.statname
+
+        #temp_pd = self.temp_pd
+
+        all_dates = temp_pd.time_stamp.unique()#temp_pd.datetime.apply(lambda x: x.timestamp()).unique()
+        #all_dates_read = temp_pd.datetime.unique()
+
+        time_list = list(map(lambda x: datetime.datetime.fromtimestamp(x), temp_pd.time_stamp.unique()))
+        all_dates_read = [str(tl.year)+'-'+str(tl.month)+'-'+str(tl.day)+'  '+str(tl.hour)+':'+str(tl.minute) for tl in time_list]
+        
+        self.min_date_widget.options = all_dates_read
+        self.max_date_widget.options = all_dates_read
+        
+        self.all_dates_read_w.value = all_dates_read
+        self.all_dates_w.value = all_dates
+        self.data_w.value = temp_pd
+        
+    def interactive_rad(self):
         """Interactive plotting of elevation-azimuth plots for a set of satellites and a set
         of stations
 
@@ -89,13 +128,13 @@ class Radplot:
 
         """
         
-        clear_output()
-        display(self.ui,self.out)
+        #clear_output()
+        #display(self.ui,self.out)
         stations= self.stations
     
         #create a list of dates between start and end date 
         date_list = [self.date1 + timedelta(days=x) for x in range((self.date2-self.date1).days+1)]
-
+        print(self.date1)
         #calculate gps weeks times (year, week, day)
         gps_weeks = [aiub.date_to_gpsweeks(x) for x in date_list]
 
@@ -133,13 +172,24 @@ class Radplot:
                                            layout={'width': '400px'}, continuous_update = False)
         max_date_widget = widgets.SelectionSlider(options = all_dates_read,style=style,description = 'Max Time',
                                            layout={'width': '400px'},continuous_update = False)
-
+        
+        self.min_date_widget = min_date_widget
+        self.max_date_widget = max_date_widget
+        
         sat_type = widgets.SelectMultiple(options = temp_pd.satellite.unique(),
                                          value = [temp_pd.satellite.unique()[0]],disabled=False)
 
         station_widget = widgets.Dropdown(options=stations.statname.unique(),value=stations.iloc[0].statname)
+        
+        all_dates_w = widgets.fixed(all_dates)
+        all_dates_read_w = widgets.fixed(all_dates_read)
+        data_w = widgets.fixed(temp_pd)
+        
+        self.all_dates_read_w = all_dates_read_w
+        self.all_dates_w = all_dates_w
+        self.data_w = data_w
 
-        d = {'data': widgets.fixed(temp_pd), 'all_dates': widgets.fixed(all_dates),'all_dates_read': widgets.fixed(all_dates_read),
+        d = {'data': data_w, 'all_dates': all_dates_w,'all_dates_read': all_dates_read_w,
               'sat_type': sat_type, 'date_min': min_date_widget,'date_max': max_date_widget, 'stations': widgets.fixed(stations),
              'station_sel': station_widget}
         d2 = {'col'+str(ind): value for (ind, value) in enumerate(items)}

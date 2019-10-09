@@ -5,6 +5,8 @@ satellite observation data collected by the Astronomy Institute of Bern Universi
 # Author: Guillaume Witz, Science IT Support, Bern University, 2019
 # License: MIT License
 
+from subprocess import Popen,PIPE
+
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -20,6 +22,8 @@ import math, re, os, glob, datetime
 import cartopy.crs as ccrs
 from pygeodesy import ellipsoidalNvector
 
+from datetime import date, timedelta
+import datetime
 
 
 def cartesian_to_ellipsoidal(x,y,z):
@@ -155,8 +159,11 @@ def import_stations(address, coord_file):
             'x_pos', 'y_pos', 'z_pos': cartesian coordinates of station
     """
     
-    data = urllib.request.urlretrieve(address+coord_file)
-    stations = pd.read_csv(data[0],skiprows=5, sep = '\s{1,8}', usecols = [1,2,3,4,5,6],names = ['station','statname','x_pos','y_pos','z_pos','flag'],engine='python')
+    data = urllib.request.urlretrieve(address+coord_file, filename='temp/temp_file.Z')
+    foo_proc = Popen(['uncompress', 'temp/temp_file.Z'], stdin=PIPE, stdout=PIPE)
+    foo_proc.communicate(input=b'yes')
+    
+    stations = pd.read_csv('temp/temp_file',skiprows=5, sep = '\s{1,8}', usecols = [1,2,3,4,5,6],names = ['index','station','statname','x_pos','y_pos','z_pos','flag'],engine='python')
     stations= stations.dropna()
     
     stations.x_pos = stations.x_pos.astype(float,copy = False)#/1000;
@@ -165,17 +172,26 @@ def import_stations(address, coord_file):
 
     return stations
 
-def import_RM_file(address, day = 0, year = '19'):
+
+def date_to_gpsweeks(selected_date):
+    epoch = date(1980, 1, 6)
+    today = selected_date
+
+    epochMonday = epoch - timedelta(epoch.weekday())
+    todayMonday = today - timedelta(today.weekday())
+    noWeeks = (todayMonday - epochMonday).days / 7
+
+    return today.year, int(noWeeks), (today.weekday()+1)%7
+
+def import_RM_file(address, gps_week):
     """Read RM file with satellite observations
     
     Parameters
     ----------
     address : string
         url address of data repository
-    day: int
-        observation day to load
-    year: string
-        year of observation
+    gps_week: tuple
+        triplets of values with (year, gps week, week day)
         
     Returns
     -------
@@ -190,27 +206,26 @@ def import_RM_file(address, day = 0, year = '19'):
             'datetime': string, time in datetime format
     """
     
-    d = day
-    yy = year
+    date_address = address+str(gps_week[0])+'/COM'+str(gps_week[1])+str(gps_week[2])+'.EPH.Z'
     
-    temp_table = []
-    
-    ddd = (3-len(str(d+1)))*'0'+str(d+1)
-    data = urllib.request.urlretrieve(address+'RM_'+yy+ddd+'.PRE.bz2')
-    #data = urllib.request.urlretrieve(address+'COD'+yy+ddd+'.CRD.Z')
+    data = urllib.request.urlretrieve(date_address, filename='temp/temp_file.Z')
+    foo_proc = Popen(['uncompress', 'temp/temp_file.Z'], stdin=PIPE, stdout=PIPE)
+    foo_proc.communicate(input=b'yes')
 
     curr_year = ''
     curr_month = ''
     curr_day = ''
     curr_hour = ''
     curr_min = ''
-    with bzopen(data[0], "r") as bzfin:
+    
+    temp_table = []
+    with open('temp/temp_file', "r") as bzfin:
         """ Handle lines here """
         lines = []
         for i, line in enumerate(bzfin):
             #if i == 10000: break
             curr_line = line.rstrip()
-            curr_line = str(curr_line,'utf-8')
+            #curr_line = str(curr_line,'utf-8')
             curr_line = curr_line.split()
             lines.append(curr_line)
 
@@ -455,10 +470,10 @@ def plot_radial(data, all_dates, all_dates_read, stations, station_sel, sat_type
     
     
     all_cols = [col0, col1, col2, col3, col4]
-    min_time = all_dates[date_min]
-    max_time = all_dates[date_max]
+    min_time = all_dates[all_dates_read.index(date_min)]
+    max_time = all_dates[all_dates_read.index(date_max)]
     
-    fig = plt.figure()
+    fig = plt.figure(figsize=(10,10))
     ax = fig.add_subplot(111, projection='polar')
     #ax.set_rlim(90, 0,1)
     
@@ -482,7 +497,7 @@ def plot_radial(data, all_dates, all_dates_read, stations, station_sel, sat_type
                 plt.plot(gframe.a,-360*gframe.e/(2*np.pi), color = all_cols[pos_sat])
     
     #ax.set_ylim(90, 0)
-    ax.set_title('from '+ str(all_dates_read[date_min])+' to '+ str(all_dates_read[date_max]))
+    ax.set_title('From '+ date_min+'   To '+ date_max,pad = 20)
     plt.show()
     
     
@@ -504,25 +519,35 @@ def interactive_rad(temp_pd, stations):
     """
     
     all_dates = temp_pd.time_stamp.unique()#temp_pd.datetime.apply(lambda x: x.timestamp()).unique()
-    all_dates_read = temp_pd.datetime.unique()
+    #all_dates_read = temp_pd.datetime.unique()
+    
+    time_list = list(map(lambda x: datetime.datetime.fromtimestamp(x), temp_pd.time_stamp.unique()))
+    all_dates_read = [str(tl.year)+'-'+str(tl.month)+'-'+str(tl.day)+'  '+str(tl.hour)+':'+str(tl.minute) for tl in time_list]
     
     colors = ['red','blue','green','cyan','orange']
     items = [widgets.ColorPicker(description=temp_pd.satellite.unique()[i],value = colors[i]) for i in range(len(temp_pd.satellite.unique()))]
+    if len(items)<5:
+        items = items + [widgets.ColorPicker(description='None',value = colors[i]) for i in range(5-len(items))]
     colwidget = widgets.VBox(items)
 
-    min_date_widget = widgets.IntSlider(min=0, max=len(all_dates)-1, step=1, value = 0, continuous_update = False)
-    max_date_widget = widgets.IntSlider(min=0, max=len(all_dates)-1, step=1, value = 0, continuous_update = False)
+    #min_date_widget = widgets.IntSlider(min=0, max=len(all_dates)-1, step=1, value = 0, continuous_update = False)
+    #max_date_widget = widgets.IntSlider(min=0, max=len(all_dates)-1, step=1, value = 0, continuous_update = False)
+    
+    style = {'description_width': '20%','readout_width' : '20%'}
+    min_date_widget = widgets.SelectionSlider(options = all_dates_read,style=style,description = 'Min Time',
+                                       layout={'width': '400px'})
+    max_date_widget = widgets.SelectionSlider(options = all_dates_read,style=style,description = 'Max Time',
+                                       layout={'width': '400px'})
 
-    #sat_type = widgets.Dropdown(options = temp_pd.satellite.unique())
     sat_type = widgets.SelectMultiple(options = temp_pd.satellite.unique(),
                                      value = [temp_pd.satellite.unique()[0]],disabled=False)
     
     station_widget = widgets.Dropdown(options=stations.statname.unique(),value=stations.iloc[0].statname)
 
-    d = {'col'+str(ind): value for (ind, value) in enumerate(items)}
-    d2 = {'data': widgets.fixed(temp_pd), 'all_dates': widgets.fixed(all_dates),'all_dates_read': widgets.fixed(all_dates_read),
+    d = {'data': widgets.fixed(temp_pd), 'all_dates': widgets.fixed(all_dates),'all_dates_read': widgets.fixed(all_dates_read),
           'sat_type': sat_type, 'date_min': min_date_widget,'date_max': max_date_widget, 'stations': widgets.fixed(stations),
          'station_sel': station_widget}
+    d2 = {'col'+str(ind): value for (ind, value) in enumerate(items)}
     d.update(d2)
 
 
@@ -560,7 +585,7 @@ def plot_map(t, sat, temp_pd, all_dates, coord_table, lons, lats):
     -------
     
     """
-    plt.figure(figsize=(6, 3))
+    plt.figure(figsize=(12, 6))
     ax = plt.axes(projection=ccrs.Robinson())
     ax.set_global()
     ax.coastlines()
@@ -571,7 +596,7 @@ def plot_map(t, sat, temp_pd, all_dates, coord_table, lons, lats):
     el_az = elevation_azimuth_grid(coord_table, curr_pd)
     grouped = el_az[(el_az.e>np.deg2rad(5))].groupby('datetime')
     
-    data = np.reshape(list(grouped.get_group(date_time).groupby('pos_ind').size()),(30,30))
+    data = np.reshape(list(grouped.get_group(date_time).groupby('pos_ind').size()),(len(lons),len(lats)))
     
     ax.contourf(np.rad2deg(lons), np.rad2deg(lats), data, transform = ccrs.PlateCarree(),vmin=0,vmax = 20)  # didn't use transform, but looks ok...
     ax.set_title(date_time)
@@ -601,7 +626,7 @@ def plot_map_grouped(t, sat, grouped, all_dates, lons, lats):
     -------
     
     """
-    plt.figure(figsize=(6, 3))
+    plt.figure(figsize=(12, 6))
     ax = plt.axes(projection=ccrs.Robinson())
     ax.set_global()
     ax.coastlines()
@@ -611,11 +636,26 @@ def plot_map_grouped(t, sat, grouped, all_dates, lons, lats):
     subgroup = grouped.get_group(date_time)
     subgroup = subgroup[subgroup.satellite == sat]
 
-    data = np.reshape(list(subgroup.groupby('pos_ind').size()),(30,30))
+    data = np.reshape(list(subgroup.groupby('pos_ind').size()),(len(lons),len(lats)))
     
     ax.contourf(np.rad2deg(lons), np.rad2deg(lats), data, transform = ccrs.PlateCarree(),vmin=0,vmax = 20)  # didn't use transform, but looks ok...
     ax.set_title(date_time)
     plt.show()
+    
+def date_picker():    
+    date1 = widgets.DatePicker(
+        description='Pick a start date',
+        disabled=False, style = {'description_width': '40%'}
+    )
+    date2 = widgets.DatePicker(
+        description='Pick an end date',
+        disabled=False, style = {'description_width': '40%'}
+    )
+    date1.value = date(2018,9,1)
+    date2.value = date(2018,9,3)
+    display(widgets.HBox([date1, date2]))
+    return date1, date2
+
     
     
     

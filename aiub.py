@@ -159,11 +159,16 @@ def import_stations(address, coord_file):
             'x_pos', 'y_pos', 'z_pos': cartesian coordinates of station
     """
     
+    if not os.path.isdir('temp'):
+        os.makedirs('temp')
+    if os.path.isfile('temp/temp_file'):
+        os.remove('temp/temp_file')
     data = urllib.request.urlretrieve(address+coord_file, filename='temp/temp_file.Z')
     foo_proc = Popen(['uncompress', 'temp/temp_file.Z'], stdin=PIPE, stdout=PIPE)
-    foo_proc.communicate(input=b'yes')
+    foo_proc.communicate()
     
     stations = pd.read_csv('temp/temp_file',skiprows=5, sep = '\s{1,8}', usecols = [1,2,3,4,5,6],names = ['index','station','statname','x_pos','y_pos','z_pos','flag'],engine='python')
+        
     stations= stations.dropna()
     
     stations.x_pos = stations.x_pos.astype(float,copy = False)#/1000;
@@ -179,9 +184,9 @@ def date_to_gpsweeks(selected_date):
 
     epochMonday = epoch - timedelta(epoch.weekday())
     todayMonday = today - timedelta(today.weekday())
-    noWeeks = (todayMonday - epochMonday).days / 7
-
-    return today.year, int(noWeeks), (today.weekday()+1)%7
+    noWeeks = (todayMonday - epochMonday).days / 7 -1
+   
+    return today.year, int(noWeeks)+today.weekday()//6, (today.weekday()+1)%7
 
 def import_RM_file(address, gps_week):
     """Read RM file with satellite observations
@@ -206,11 +211,14 @@ def import_RM_file(address, gps_week):
             'datetime': string, time in datetime format
     """
     
+    if not os.path.isdir('temp'):
+        os.makedirs('temp')
+    if os.path.isfile('temp/temp_file'):
+        os.remove('temp/temp_file')
     date_address = address+str(gps_week[0])+'/COM'+str(gps_week[1])+str(gps_week[2])+'.EPH.Z'
-    
     data = urllib.request.urlretrieve(date_address, filename='temp/temp_file.Z')
     foo_proc = Popen(['uncompress', 'temp/temp_file.Z'], stdin=PIPE, stdout=PIPE)
-    foo_proc.communicate(input=b'yes')
+    foo_proc.communicate()
 
     curr_year = ''
     curr_month = ''
@@ -240,7 +248,7 @@ def import_RM_file(address, gps_week):
                 sat = re.findall('P([GRECJ])[0-9]{2}',curr_line[0])[0]
                 temp_table.append([curr_year,curr_month,curr_day,curr_hour,curr_min, sat,curr_line[0],
                                    float(curr_line[1]),float(curr_line[2]),float(curr_line[3]),float(curr_line[4])])
-    
+            
     temp_pd = pd.DataFrame(np.array(temp_table),columns = ['year','month','day','hour','minute','satellite','name','c1','c2','c3','c4'])
     
     temp_pd.c1 = temp_pd.c1.astype(float,copy = False)*1000;
@@ -557,7 +565,7 @@ def interactive_rad(temp_pd, stations):
     ui = widgets.VBox([w1,w2,w3, colwidget])
     
     out = widgets.interactive_output(plot_radial, d)
-    display(ui,out)
+    display(ui,out)   
     
     
 def plot_map(t, sat, temp_pd, all_dates, coord_table, lons, lats):

@@ -1,6 +1,6 @@
 # Satellites
 
-This is a demo repository to show how to represent information extracted from Global Navigation Satellite Systems observations.
+This is a demo repository to show how to represent information extracted from Global Navigation Satellite Systems observations. Disclaimer: There is no guarantee that the calculations are correct as this is intended as a demo!
 
 To start as regular Binder-based Jupyter notebooks click on the badge below:
 

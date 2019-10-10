@@ -1,5 +1,7 @@
 # Satellites
 
+This is a demo repository to show how to represent information extracted from Global Navigation Satellite Systems observations.
+
 To start as regular Binder-based Jupyter notebooks click on the badge below:
 
 [![Binder](https://mybinder.org/badge_logo.svg)](https://mybinder.org/v2/gh/guiwitz/Satellites/master)

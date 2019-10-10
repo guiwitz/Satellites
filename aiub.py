@@ -481,7 +481,7 @@ def plot_radial(data, all_dates, all_dates_read, stations, station_sel, sat_type
     min_time = all_dates[all_dates_read.index(date_min)]
     max_time = all_dates[all_dates_read.index(date_max)]
     
-    fig = plt.figure(figsize=(10,10))
+    fig = plt.figure(figsize=(7,7))
     ax = fig.add_subplot(111, projection='polar')
     #ax.set_rlim(90, 0,1)
     

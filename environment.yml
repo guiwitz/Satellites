@@ -1,3 +1,4 @@
+name: satellite
 channels:
   - conda-forge
 dependencies:

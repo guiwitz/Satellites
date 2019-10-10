@@ -12,7 +12,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 
 import ipywidgets as widgets
-from ipywidgets import interact, interactive, fixed, interact_manual
+from ipywidgets import interact, interactive, fixed, interact_manual, Layout
 
 import urllib.request
 from bz2 import BZ2File as bzopen
@@ -179,14 +179,67 @@ def import_stations(address, coord_file):
 
 
 def date_to_gpsweeks(selected_date):
+    """Read observation station file and get its name and coordinates
+    
+    Parameters
+    ----------
+    selected_date : date.datetime object
+        a given time
+        
+    Returns
+    -------
+    time_output : tuple
+        triplet of values: year, gps-week, week-day in gps frame (sunday == 0)
+    """
     epoch = date(1980, 1, 6)
     today = selected_date
 
     epochMonday = epoch - timedelta(epoch.weekday())
     todayMonday = today - timedelta(today.weekday())
     noWeeks = (todayMonday - epochMonday).days / 7 -1
+    time_output = (today.year, int(noWeeks)+today.weekday()//6, (today.weekday()+1)%7)
    
-    return today.year, int(noWeeks)+today.weekday()//6, (today.weekday()+1)%7
+    return time_output
+
+
+def import_sat_series(date_min, date_max, address_sat):
+    """Read observation station file and get its name and coordinates
+    
+    Parameters
+    ----------
+    date_min : date.datetime object
+        earliest time point
+    date_max : date.datetime object
+        latest time point
+    address_sat: string
+        general url address of data repository
+        
+    Returns
+    -------
+    temp_pd : pandas dataframe
+        Dataframe with station information from multiple time points:
+            'year', month','day','hour','minute': int indicating time
+            'satellite': string, satellite type as readable names (GPS, GLONASS etc.)
+            'name': string, satellite name
+            'c1','c2','c3','c4': float, satellite coordinate
+            'time_stamp': float, time-stamp
+            'key': int, value = 1, used for table joininig operations
+            'datetime': string, time in datetime format
+    """
+    #create a list of dates between start and end date 
+    date_list = [date_min + timedelta(days=x) for x in range((date_max-date_min).days+1)]
+    #calculate gps weeks times (year, week, day)
+    gps_weeks = [date_to_gpsweeks(x) for x in date_list]
+
+    #load satellite data
+    temp_pd = pd.concat([import_RM_file(address_sat, g) for g in gps_weeks]).reset_index()
+
+    #reanme satellite types
+    sat_dict = {'G':'GPS','R':'GLONASS','E':'Galileo','C':'BeiDou','J':'QZSS'}
+    temp_pd['satellite'] = temp_pd.satellite.apply(lambda x : sat_dict[x])
+    
+    return temp_pd
+
 
 def import_RM_file(address, gps_week):
     """Read RM file with satellite observations
@@ -547,10 +600,12 @@ def interactive_rad(temp_pd, stations):
     max_date_widget = widgets.SelectionSlider(options = all_dates_read,style=style,description = 'Max Time',
                                        layout={'width': '400px'})
 
-    sat_type = widgets.SelectMultiple(options = temp_pd.satellite.unique(),
+    sat_type = widgets.SelectMultiple(options = temp_pd.satellite.unique(), description = 'Select satellite types',
                                      value = [temp_pd.satellite.unique()[0]],disabled=False)
     
-    station_widget = widgets.Dropdown(options=stations.statname.unique(),value=stations.iloc[0].statname)
+    station_widget = widgets.Dropdown(options=stations.statname.unique(),value=stations.iloc[0].statname,
+                                     description = 'Select observation station',
+                                     style = {'description_width': '50%'}, layout={'width': '400px'})
 
     d = {'data': widgets.fixed(temp_pd), 'all_dates': widgets.fixed(all_dates),'all_dates_read': widgets.fixed(all_dates_read),
           'sat_type': sat_type, 'date_min': min_date_widget,'date_max': max_date_widget, 'stations': widgets.fixed(stations),
@@ -558,11 +613,12 @@ def interactive_rad(temp_pd, stations):
     d2 = {'col'+str(ind): value for (ind, value) in enumerate(items)}
     d.update(d2)
 
-
-    w1 = widgets.HBox([sat_type])
+    title_w = widgets.HTML("<span style='float:left;font-size:2em;font-weight:bold'>Radial plot of satellite observation</span>")
+    time_title_w = widgets.HTML("<span style='float:left;font-size:1em;font-weight:bold'>Pick time range for observations</span>")
+    w1 = widgets.HBox([sat_type,colwidget])
     w2 = widgets.HBox([station_widget])
     w3 = widgets.HBox([min_date_widget,max_date_widget])
-    ui = widgets.VBox([w1,w2,w3, colwidget])
+    ui = widgets.VBox([title_w,w1,w2,time_title_w,w3], layout = Layout(align_items = 'stretch'))
     
     out = widgets.interactive_output(plot_radial, d)
     display(ui,out)   

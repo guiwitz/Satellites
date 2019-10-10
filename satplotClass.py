@@ -62,8 +62,9 @@ class Radplot:
 
         d = {'date1': date1, 'date2': date2}
 
+        title_w = widgets.HTML("<span style='float:left;font-size:2em;font-weight:bold'>Radial plot of satellite observation</span>")
 
-        ui = widgets.VBox([widgets.HBox([date1, date2]), button])
+        ui = widgets.VBox([title_w, widgets.HBox([date1, date2]), button])
         out = widgets.interactive_output(self.update_date, d)
         
         self.ui = ui
@@ -80,7 +81,7 @@ class Radplot:
     
         #create a list of dates between start and end date 
         date_list = [self.date1 + timedelta(days=x) for x in range((self.date2-self.date1).days+1)]
-        print(self.date1)
+
         #calculate gps weeks times (year, week, day)
         gps_weeks = [aiub.date_to_gpsweeks(x) for x in date_list]
 
@@ -176,10 +177,13 @@ class Radplot:
         self.min_date_widget = min_date_widget
         self.max_date_widget = max_date_widget
         
-        sat_type = widgets.SelectMultiple(options = temp_pd.satellite.unique(),
-                                         value = [temp_pd.satellite.unique()[0]],disabled=False)
+        sat_type = widgets.SelectMultiple(options = temp_pd.satellite.unique(), description = 'Select satellite types',
+                                     value = [temp_pd.satellite.unique()[0]],disabled=False)
+    
+        station_widget = widgets.Dropdown(options=stations.statname.unique(),value=stations.iloc[0].statname,
+                                     description = 'Select observation station',
+                                     style = {'description_width': '50%'}, layout={'width': '400px'})
 
-        station_widget = widgets.Dropdown(options=stations.statname.unique(),value=stations.iloc[0].statname)
         
         all_dates_w = widgets.fixed(all_dates)
         all_dates_read_w = widgets.fixed(all_dates_read)
@@ -195,11 +199,12 @@ class Radplot:
         d2 = {'col'+str(ind): value for (ind, value) in enumerate(items)}
         d.update(d2)
 
-
-        w1 = widgets.HBox([sat_type])
+        time_title_w = widgets.HTML("<span style='float:left;font-size:1em;font-weight:bold'>Pick time range for observations</span>")
+        
+        w1 = widgets.HBox([sat_type,colwidget])
         w2 = widgets.HBox([station_widget])
         w3 = widgets.HBox([min_date_widget,max_date_widget])
-        ui = widgets.VBox([w1,w2,w3, colwidget])
+        ui = widgets.VBox([w1,w2,time_title_w,w3])
 
         out = widgets.interactive_output(aiub.plot_radial, d)
         display(ui,out)

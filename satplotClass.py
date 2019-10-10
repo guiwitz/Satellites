@@ -134,7 +134,7 @@ class Radplot:
     
         #create a list of dates between start and end date 
         date_list = [self.date1 + timedelta(days=x) for x in range((self.date2-self.date1).days+1)]
-        print(self.date1)
+
         #calculate gps weeks times (year, week, day)
         gps_weeks = [aiub.date_to_gpsweeks(x) for x in date_list]
 
